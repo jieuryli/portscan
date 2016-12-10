@@ -52,7 +52,7 @@ int main(int argc, char **argv){
 		// Check if number is legit 0 < N < 65536 using strtoul
 		port_l = strtoul(argv[i],NULL,10);
 		if (port_l < 1 || port_l > 65535){
-			fprintf(stdout,"%lu invalid\n",port_l);
+			fprintf(stdout,"%s invalid\n",argv[i]);
 			fflush(stdout);
 			continue;
 		}
