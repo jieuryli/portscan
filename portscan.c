@@ -4,11 +4,18 @@
 #include <errno.h>
 #include <regex.h>
 #include <sys/socket.h>
+#include <sys/types.h>
+#include <sys/time.h>
+#include <sys/select.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+#include <unistd.h>
+#include <fcntl.h>
 #include "portscan.h"
 
 #define IP_ADDRESS_REGEX "^[1-9][0-9]*\\.[1-9][0-9]*\\.[1-9][0-9]*\\.[1-9][0-9]*$"
+#define DEFAULT_TIMEOUT_MICROSECONDS 1000000
+#define DEBUG 1
 
 int main(int argc, char **argv){
 	if (argc < 3){
@@ -16,9 +23,12 @@ int main(int argc, char **argv){
 		exit(1);
 	}
 	struct hostent *host;
-	int err, i, sock;
+	int i, sock;
 	unsigned long int port_l;
 	struct sockaddr_in sa;
+	fd_set fdset;
+	struct timeval tv;
+	int timeout_microseconds = DEFAULT_TIMEOUT_MICROSECONDS;
 
 	regex_t regex;
 
@@ -48,26 +58,42 @@ int main(int argc, char **argv){
 		}
 		sa.sin_port = htons((int)port_l);
 		sock = socket(AF_INET, SOCK_STREAM, 0);
+		fcntl(sock, F_SETFL, O_NONBLOCK);
+		if (DEBUG) fprintf(stderr," ---> Before connecting to sock here for port %lu\n",port_l);
+		connect(sock, (struct sockaddr *)&sa, sizeof sa);
+		if (DEBUG) fprintf(stderr," ---> After connecting to sock here for port %lu\n",port_l);
 
-		if (sock < 0) {
-			fprintf(stderr,"Problem obtaining socket for port %lu",port_l);
-			continue;
-		}
+		FD_ZERO(&fdset);
+		FD_SET(sock, &fdset);
+		tv.tv_sec = (int)(timeout_microseconds / 1000000);
+		tv.tv_usec = timeout_microseconds % 1000000;
 
-		err = connect(sock, (struct sockaddr *)&sa, sizeof sa);
+		if (DEBUG) fprintf(stderr," ---> Before select port %lu\n",port_l);
+		if (select(sock+1, NULL, &fdset, NULL, &tv) == 1){
+		if (DEBUG) fprintf(stderr," ---> Could select port %lu\n",port_l);
+			int so_error;
+			socklen_t len = sizeof so_error;
 
-		if (err < 0) {
-			// Can't connect
-			fprintf(stdout,"%lu closed\n",port_l);
+			getsockopt(sock, SOL_SOCKET, SO_ERROR, &so_error, &len);
+
+			if (so_error == 0){
+				fprintf(stdout,"%lu open\n",port_l);
+				fflush(stdout);
+			}
+			else{
+				fprintf(stdout,"%lu closed\n",port_l);
+				fflush(stdout);
+			}
 		}
 		else{
-			// Sucess, can connect
-			fprintf(stdout,"%lu open\n",port_l);
+			if (DEBUG) fprintf(stderr," ---> Could not select port %lu\n",port_l);
 		}
-
-		fflush(stdout);
+		if (DEBUG) fprintf(stderr," ---> Closing socket now for port %lu\n",port_l);
+		close(sock);
+		if (DEBUG) fprintf(stderr," ---> Closed socked now for port %lu\n",port_l);
 	}
 
+	if (DEBUG) fprintf(stderr," ---> Out of loop\n");
 	regfree(&regex);
 
 }
