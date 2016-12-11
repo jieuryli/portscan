@@ -102,7 +102,7 @@ int main(int argc, char **argv){
 				fflush(stdout);
 			}
 			else{
-				fprintf(stdout,"%lu error\n",port_l);
+				fprintf(stdout,"%lu closed\n",port_l);
 				fflush(stdout);
 			}
 		}
