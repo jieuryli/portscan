@@ -15,23 +15,48 @@
 
 #define IP_ADDRESS_REGEX "^[1-9][0-9]*\\.[1-9][0-9]*\\.[1-9][0-9]*\\.[1-9][0-9]*$"
 #define DEFAULT_TIMEOUT_MICROSECONDS 1000000
+#define GETOPT_ALL_POSSIBLE_ALPHA "abcdefghijklmnopqrst:uvwxyzABCDEFGHIJKLMNOPQRST:UVWXYZ"
 
 int main(int argc, char **argv){
-	if (argc < 3){
-		fprintf(stderr,"Usage: %s host port [port2] [port3] [port4] ...\n",argv[0]);
-		exit(1);
-	}
+	int opt;
+	unsigned long int timeout_microseconds = DEFAULT_TIMEOUT_MICROSECONDS;
+
 	struct hostent *host;
 	int i, sock;
 	unsigned long int port_l;
 	struct sockaddr_in sa;
 	fd_set fdset;
 	struct timeval tv;
-	int timeout_microseconds = DEFAULT_TIMEOUT_MICROSECONDS;
-
 	regex_t regex;
 
-	char *hostname = argv[1];
+	while ((opt = getopt(argc,argv,GETOPT_ALL_POSSIBLE_ALPHA)) != -1){
+		switch(opt){
+			case 'T':
+				if (strtoul(optarg,NULL,10) > 0){
+					timeout_microseconds = strtoul(optarg,NULL,10);
+				}
+				else{
+					usage_and_die(argv,"Invalid value for -T.");
+				}
+				break;
+			case 't':
+				if (strtoul(optarg,NULL,10) > 0){
+					timeout_microseconds = strtoul(optarg,NULL,10) * 1000000;
+				}
+				else{
+					usage_and_die(argv,"Invalid value for -t.");
+				}
+				break;
+			default:
+				usage_and_die(argv,"Invalid option detected.");
+		}
+	}
+
+	int arg_offset = optind;
+
+	if (argc < (2+arg_offset)) usage_and_die(argv,NULL);
+
+	char *hostname = argv[arg_offset];
 
 	// Initialize sockaddr_in structure
 	strncpy((char *)&sa, "", sizeof sa);
@@ -48,7 +73,7 @@ int main(int argc, char **argv){
 		exit(2);
 	}
 
-	for (i=2; i<argc; i++){
+	for (i=(1+arg_offset); i<argc; i++){
 		// Check if number is legit 0 < N < 65536 using strtoul
 		port_l = strtoul(argv[i],NULL,10);
 		if (port_l < 1 || port_l > 65535){
@@ -64,7 +89,7 @@ int main(int argc, char **argv){
 		FD_ZERO(&fdset);
 		FD_SET(sock, &fdset);
 		tv.tv_sec = (int)(timeout_microseconds / 1000000);
-		tv.tv_usec = timeout_microseconds % 1000000;
+		tv.tv_usec = (int)(timeout_microseconds % 1000000);
 
 		if (select(sock+1, NULL, &fdset, NULL, &tv) == 1){
 			int so_error;
